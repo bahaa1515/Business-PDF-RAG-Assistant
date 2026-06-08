@@ -10,6 +10,13 @@ from src.vector_store import (
     load_vector_store,
     reset_vector_store,
 )
+from src.config import (
+    DEFAULT_CHUNK_OVERLAP,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_RETRIEVAL_METHOD,
+    RETRIEVAL_METHOD_OPTIONS,
+    TOP_K,
+)
 from src.rag_chain import answer_question
 from src.utils import format_source_preview
 
@@ -32,7 +39,13 @@ def check_api_key() -> bool:
     return bool(os.getenv("OPENAI_API_KEY"))
 
 
-def process_uploaded_pdfs(uploaded_files):
+def process_uploaded_pdfs(
+    uploaded_files,
+    chunk_size: int,
+    chunk_overlap: int,
+    top_k: int,
+    retrieval_method: str,
+):
     """
     Process uploaded PDFs:
     1. Load pages
@@ -53,13 +66,21 @@ def process_uploaded_pdfs(uploaded_files):
             "They may be scanned PDFs or empty files."
         )
 
-    chunks = split_pages_into_chunks(all_pages)
+    chunks = split_pages_into_chunks(
+        all_pages,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+    )
 
     if not chunks:
         raise ValueError("No text chunks were created from the uploaded PDFs.")
 
     vector_store = create_vector_store(chunks)
-    retriever = get_retriever(vector_store)
+    retriever = get_retriever(
+        vector_store,
+        k=top_k,
+        method=retrieval_method,
+    )
 
     return retriever, len(all_pages), len(chunks)
 
@@ -104,10 +125,34 @@ def main():
     if "processed_files" not in st.session_state:
         st.session_state.processed_files = []
 
+    if "chunk_size" not in st.session_state:
+        st.session_state.chunk_size = DEFAULT_CHUNK_SIZE
+
+    if "chunk_overlap" not in st.session_state:
+        st.session_state.chunk_overlap = DEFAULT_CHUNK_OVERLAP
+
+    if "top_k" not in st.session_state:
+        st.session_state.top_k = TOP_K
+
+    if "retrieval_method" not in st.session_state:
+        st.session_state.retrieval_method = DEFAULT_RETRIEVAL_METHOD
+
+    if "saved_settings" not in st.session_state:
+        st.session_state.saved_settings = {
+            "chunk_size": st.session_state.chunk_size,
+            "chunk_overlap": st.session_state.chunk_overlap,
+            "top_k": st.session_state.top_k,
+            "retrieval_method": st.session_state.retrieval_method,
+        }
+
     if api_key_present and st.session_state.retriever is None:
         existing_vector_store = load_vector_store()
         if existing_vector_store is not None:
-            st.session_state.retriever = get_retriever(existing_vector_store)
+            st.session_state.retriever = get_retriever(
+                existing_vector_store,
+                k=st.session_state.top_k,
+                method=st.session_state.retrieval_method,
+            )
             st.info("Loaded existing vector store from local disk.")
 
     with st.sidebar:
@@ -118,6 +163,54 @@ def main():
             type=["pdf"],
             accept_multiple_files=True,
         )
+
+        st.subheader("RAG settings")
+
+        st.session_state.chunk_size = st.number_input(
+            "Chunk size",
+            min_value=100,
+            max_value=2000,
+            value=st.session_state.chunk_size,
+            step=50,
+            key="chunk_size",
+        )
+
+        st.session_state.chunk_overlap = st.number_input(
+            "Chunk overlap",
+            min_value=0,
+            max_value=1000,
+            value=st.session_state.chunk_overlap,
+            step=25,
+            key="chunk_overlap",
+        )
+
+        st.session_state.top_k = st.number_input(
+            "Top K retrieval",
+            min_value=1,
+            max_value=20,
+            value=st.session_state.top_k,
+            step=1,
+            key="top_k",
+        )
+
+        st.session_state.retrieval_method = st.selectbox(
+            "Retrieval method",
+            options=RETRIEVAL_METHOD_OPTIONS,
+            index=RETRIEVAL_METHOD_OPTIONS.index(st.session_state.retrieval_method),
+            key="retrieval_method",
+        )
+
+        settings_changed = (
+            st.session_state.chunk_size != st.session_state.saved_settings["chunk_size"]
+            or st.session_state.chunk_overlap != st.session_state.saved_settings["chunk_overlap"]
+            or st.session_state.top_k != st.session_state.saved_settings["top_k"]
+            or st.session_state.retrieval_method != st.session_state.saved_settings["retrieval_method"]
+        )
+
+        if settings_changed and st.session_state.processed_files:
+            st.warning(
+                "RAG settings changed. Please reprocess your documents to update the index."
+            )
 
         process_button = st.button("Process documents")
 
@@ -133,13 +226,23 @@ def main():
                 try:
                     with st.spinner("Processing PDFs..."):
                         retriever, page_count, chunk_count = process_uploaded_pdfs(
-                            uploaded_files
+                            uploaded_files,
+                            chunk_size=st.session_state.chunk_size,
+                            chunk_overlap=st.session_state.chunk_overlap,
+                            top_k=st.session_state.top_k,
+                            retrieval_method=st.session_state.retrieval_method,
                         )
 
                         st.session_state.retriever = retriever
                         st.session_state.processed_files = [
                             uploaded_file.name for uploaded_file in uploaded_files
                         ]
+                        st.session_state.saved_settings = {
+                            "chunk_size": st.session_state.chunk_size,
+                            "chunk_overlap": st.session_state.chunk_overlap,
+                            "top_k": st.session_state.top_k,
+                            "retrieval_method": st.session_state.retrieval_method,
+                        }
 
                     st.success(
                         f"Processed {len(uploaded_files)} file(s), "

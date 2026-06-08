@@ -75,13 +75,20 @@ def reset_vector_store() -> None:
         shutil.rmtree(CHROMA_PERSIST_DIRECTORY)
 
 
-def get_retriever(vector_store: Chroma, k: int = TOP_K):
+def get_retriever(vector_store: Chroma, k: int = TOP_K, method: str = "similarity"):
     """
     Create a retriever from the vector store.
 
-    k means how many relevant chunks to retrieve for each question.
+    Supports similarity search or MMR search depending on the method.
     """
 
+    if method == "mmr":
+        return vector_store.as_retriever(
+            search_type="mmr",
+            search_kwargs={"k": k, "fetch_k": max(k * 4, k)},
+        )
+
     return vector_store.as_retriever(
-        search_kwargs={"k": k}
+        search_type="similarity",
+        search_kwargs={"k": k},
     )
