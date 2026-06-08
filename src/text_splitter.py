@@ -1,9 +1,12 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from src.config import DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP
+
+
 def split_pages_into_chunks(
     pages: list[dict],
-    chunk_size: int = 800,
-    chunk_overlap: int = 150,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
 ) -> list[dict]:
     """
     Split extracted PDF pages into smaller text chunks.

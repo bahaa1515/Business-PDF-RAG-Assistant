@@ -1,0 +1,3 @@
+question,expected_source,expected_page,question_type
+"What is the company's refund policy?",example.pdf,2,answerable
+"When was the company founded?",, ,unanswerable

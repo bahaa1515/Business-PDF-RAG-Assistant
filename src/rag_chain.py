@@ -1,23 +1,9 @@
 from langchain_openai import ChatOpenAI
+
+from src.config import MODEL_NAME, REFUSAL_MESSAGE, RETRIEVAL_SCORE_THRESHOLD
 from src.prompts import RAG_PROMPT
-
-
-def format_documents_for_context(documents) -> str:
-    """
-    Convert retrieved documents into one context string for the LLM.
-    """
-
-    context_parts = []
-
-    for i, doc in enumerate(documents, start=1):
-        source = doc.metadata.get("source", "Unknown source")
-        page = doc.metadata.get("page", "Unknown page")
-
-        context_parts.append(
-            f"[Source {i}: {source}, page {page}]\n{doc.page_content}"
-        )
-
-    return "\n\n".join(context_parts)
+from src.utils import format_documents_for_context
+import time
 
 
 def answer_question(question: str, retriever) -> dict:
@@ -30,14 +16,39 @@ def answer_question(question: str, retriever) -> dict:
     """
 
     # 1. Retrieve relevant chunks
+    start = time.perf_counter()
     retrieved_docs = retriever.invoke(question)
+
+    # If no documents were retrieved, return the refusal message immediately.
+    if not retrieved_docs:
+        return {
+            "answer": REFUSAL_MESSAGE,
+            "sources": [],
+            "latency_seconds": time.perf_counter() - start,
+        }
 
     # 2. Format retrieved chunks as context
     context = format_documents_for_context(retrieved_docs)
 
+    # Optionally filter retrieved docs by a score threshold if available.
+    if RETRIEVAL_SCORE_THRESHOLD is not None:
+        filtered = []
+        for d in retrieved_docs:
+            score = None
+            # Some retrievers place score in metadata, others expose attribute
+            if isinstance(d.metadata, dict) and "score" in d.metadata:
+                score = d.metadata.get("score")
+            elif hasattr(d, "score"):
+                score = getattr(d, "score")
+
+            if score is None or score >= RETRIEVAL_SCORE_THRESHOLD:
+                filtered.append(d)
+
+        retrieved_docs = filtered
+
     # 3. Create the LLM
     llm = ChatOpenAI(
-        model="gpt-4o-mini",
+        model=MODEL_NAME,
         temperature=0,
     )
 
@@ -52,7 +63,20 @@ def answer_question(question: str, retriever) -> dict:
     # 5. Ask the LLM
     response = llm.invoke(prompt)
 
+    # If the model followed instructions to refuse, return the exact refusal message.
+    content = response.content.strip()
+    latency = time.perf_counter() - start
+
+    if REFUSAL_MESSAGE in content:
+        return {
+            "answer": REFUSAL_MESSAGE,
+            "sources": [],
+            "latency_seconds": latency,
+        }
+
+    # Normal answer
     return {
-        "answer": response.content,
+        "answer": content,
         "sources": retrieved_docs,
+        "latency_seconds": latency,
     }

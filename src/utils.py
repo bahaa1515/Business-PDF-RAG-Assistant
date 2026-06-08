@@ -36,3 +36,17 @@ def format_documents_for_context(documents) -> str:
         )
 
     return "\n\n".join(context_parts)
+
+
+def extract_sources_metadata(documents) -> list:
+    """Return a simple list of source metadata dicts for storage or evaluation."""
+    out = []
+    for d in documents:
+        out.append(
+            {
+                'source': d.metadata.get('source'),
+                'page': d.metadata.get('page'),
+                'chunk_id': d.metadata.get('chunk_id'),
+            }
+        )
+    return out
