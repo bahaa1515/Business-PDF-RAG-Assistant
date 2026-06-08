@@ -1,6 +1,11 @@
+import os
+import shutil
+
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
+
+from src.config import EMBEDDING_MODEL, TOP_K, CHROMA_PERSIST_DIRECTORY
 
 
 def create_documents_from_chunks(chunks: list[dict]) -> list[Document]:
@@ -32,17 +37,45 @@ def create_vector_store(chunks: list[dict]) -> Chroma:
 
     documents = create_documents_from_chunks(chunks)
 
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 
     vector_store = Chroma.from_documents(
         documents=documents,
         embedding=embeddings,
+        persist_directory=CHROMA_PERSIST_DIRECTORY,
+    )
+
+    vector_store.persist()
+    return vector_store
+
+
+def load_vector_store() -> Chroma | None:
+    """
+    Load an existing persistent Chroma vector store if it exists.
+    """
+
+    if not os.path.isdir(CHROMA_PERSIST_DIRECTORY):
+        return None
+
+    embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
+    vector_store = Chroma(
+        persist_directory=CHROMA_PERSIST_DIRECTORY,
+        embedding_function=embeddings,
     )
 
     return vector_store
 
 
-def get_retriever(vector_store: Chroma, k: int = 4):
+def reset_vector_store() -> None:
+    """
+    Remove the local Chroma database directory to reset the index.
+    """
+
+    if os.path.isdir(CHROMA_PERSIST_DIRECTORY):
+        shutil.rmtree(CHROMA_PERSIST_DIRECTORY)
+
+
+def get_retriever(vector_store: Chroma, k: int = TOP_K):
     """
     Create a retriever from the vector store.
 

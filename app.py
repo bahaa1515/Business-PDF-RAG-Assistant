@@ -4,8 +4,14 @@ from dotenv import load_dotenv
 
 from src.pdf_loader import load_pdf_pages
 from src.text_splitter import split_pages_into_chunks
-from src.vector_store import create_vector_store, get_retriever
+from src.vector_store import (
+    create_vector_store,
+    get_retriever,
+    load_vector_store,
+    reset_vector_store,
+)
 from src.rag_chain import answer_question
+from src.utils import format_source_preview
 
 
 load_dotenv()
@@ -72,7 +78,7 @@ def display_sources(sources):
     for i, doc in enumerate(sources, start=1):
         source = doc.metadata.get("source", "Unknown source")
         page = doc.metadata.get("page", "Unknown page")
-        preview = doc.page_content[:300].replace("\n", " ")
+        preview = format_source_preview(doc)
 
         with st.expander(f"Source {i}: {source} — page {page}"):
             st.write(preview + "...")
@@ -84,17 +90,25 @@ def main():
         "Upload PDF documents, ask questions, and get answers based only on the uploaded files."
     )
 
-    if not check_api_key():
-        st.error(
-            "OpenAI API key is missing. Add it to your .env file as OPENAI_API_KEY."
+    api_key_present = check_api_key()
+
+    if not api_key_present:
+        st.warning(
+            "OpenAI API key is missing. Add it to your .env file as OPENAI_API_KEY. "
+            "You can still view the app layout, but document processing and question answering will stay disabled until the API key is added."
         )
-        st.stop()
 
     if "retriever" not in st.session_state:
         st.session_state.retriever = None
 
     if "processed_files" not in st.session_state:
         st.session_state.processed_files = []
+
+    if api_key_present and st.session_state.retriever is None:
+        existing_vector_store = load_vector_store()
+        if existing_vector_store is not None:
+            st.session_state.retriever = get_retriever(existing_vector_store)
+            st.info("Loaded existing vector store from local disk.")
 
     with st.sidebar:
         st.header("Upload documents")
@@ -110,6 +124,11 @@ def main():
         if process_button:
             if not uploaded_files:
                 st.warning("Please upload at least one PDF file.")
+            elif not api_key_present:
+                st.warning(
+                    "OpenAI API key is missing. Add OPENAI_API_KEY to your .env file "
+                    "before processing documents."
+                )
             else:
                 try:
                     with st.spinner("Processing PDFs..."):
@@ -130,6 +149,12 @@ def main():
                 except Exception as e:
                     st.error(f"Error while processing documents: {e}")
 
+        if st.button("Reset vector store"):
+            reset_vector_store()
+            st.session_state.retriever = None
+            st.session_state.processed_files = []
+            st.success("Local Chroma vector store has been reset.")
+
         if st.session_state.processed_files:
             st.subheader("Processed files")
             for file_name in st.session_state.processed_files:
@@ -140,6 +165,13 @@ def main():
     question = st.chat_input("Ask a question about your uploaded PDFs")
 
     if question:
+        if not api_key_present:
+            st.warning(
+                "OpenAI API key is missing. Add it to your .env file as OPENAI_API_KEY "
+                "before asking questions."
+            )
+            return
+
         if st.session_state.retriever is None:
             st.warning("Please upload and process PDF documents first.")
             return
