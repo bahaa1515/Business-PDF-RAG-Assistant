@@ -65,4 +65,3 @@ def run_experiments(uploaded_files: List[Dict], questions: List[Dict], save_path
                 writer.writerow(r)
 
     return results
-*** End Patch

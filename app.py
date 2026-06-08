@@ -23,6 +23,7 @@ from src.config import (
     DEFAULT_CHUNK_OVERLAP,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_RETRIEVAL_METHOD,
+    EVAL_DEFAULT_CSV,
     RETRIEVAL_METHOD_OPTIONS,
     TOP_K,
 )
@@ -192,7 +193,7 @@ def main():
 
         st.subheader("RAG settings")
 
-        st.session_state.chunk_size = st.number_input(
+        st.number_input(
             "Chunk size",
             min_value=100,
             max_value=2000,
@@ -201,7 +202,7 @@ def main():
             key="chunk_size",
         )
 
-        st.session_state.chunk_overlap = st.number_input(
+        st.number_input(
             "Chunk overlap",
             min_value=0,
             max_value=1000,
@@ -210,7 +211,7 @@ def main():
             key="chunk_overlap",
         )
 
-        st.session_state.top_k = st.number_input(
+        st.number_input(
             "Top K retrieval",
             min_value=1,
             max_value=20,
@@ -219,7 +220,7 @@ def main():
             key="top_k",
         )
 
-        st.session_state.retrieval_method = st.selectbox(
+        st.selectbox(
             "Retrieval method",
             options=RETRIEVAL_METHOD_OPTIONS,
             index=RETRIEVAL_METHOD_OPTIONS.index(st.session_state.retrieval_method),
@@ -325,7 +326,14 @@ def main():
                 st.write(item['answer'])
                 # show sources for each message
                 if item.get('sources'):
-                    display_sources([type('D', (), {'metadata': s, 'page_content': ''})() for s in item['sources']])
+                    display_sources([
+                        type(
+                            'Doc',
+                            (),
+                            {'metadata': s, 'page_content': s.get('page_content', '')},
+                        )()
+                        for s in item['sources']
+                    ])
 
         question = st.chat_input("Ask a question about your uploaded PDFs")
 
@@ -335,11 +343,8 @@ def main():
         st.write("Run evaluation questions to measure retrieval and refusal behavior.")
 
         eval_file = st.file_uploader("Upload evaluation CSV", type=["csv"], key="eval_csv")
-        load_default = False
-        if os.path.exists(st.session_state.get('EVAL_DEFAULT_CSV', '')):
-            load_default = st.button("Load default evaluation file")
-
         questions = []
+
         if eval_file is not None:
             # save uploaded temp file to disk and load
             data = eval_file.getvalue().decode('utf-8')
@@ -348,18 +353,12 @@ def main():
             reader = csv.DictReader(io.StringIO(data))
             for row in reader:
                 questions.append(row)
-        else:
-            # try default location
+        elif os.path.exists(EVAL_DEFAULT_CSV):
             try:
-                if os.path.exists('eval/evaluation_questions.csv'):
-                    with open('eval/evaluation_questions.csv', newline='', encoding='utf-8') as f:
-                        import csv as _csv
-
-                        reader = _csv.DictReader(f)
-                        for row in reader:
-                            questions.append(row)
-            except Exception:
-                pass
+                questions = evaluation_module.load_evaluation_questions(EVAL_DEFAULT_CSV)
+                st.info(f"Loaded default evaluation file from {EVAL_DEFAULT_CSV}")
+            except Exception as e:
+                st.error(f"Failed to load default evaluation file: {e}")
 
         if not questions:
             st.info('No evaluation questions loaded. Upload a CSV or place one at eval/evaluation_questions.csv')

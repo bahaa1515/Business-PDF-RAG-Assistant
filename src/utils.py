@@ -47,6 +47,7 @@ def extract_sources_metadata(documents) -> list:
                 'source': d.metadata.get('source'),
                 'page': d.metadata.get('page'),
                 'chunk_id': d.metadata.get('chunk_id'),
+                'page_content': d.page_content[:300].replace("\n", " "),
             }
         )
     return out

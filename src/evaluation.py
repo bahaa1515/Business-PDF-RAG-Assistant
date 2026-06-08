@@ -3,7 +3,7 @@ import os
 import csv
 import time
 from typing import List, Dict
-from src.config import EVAL_DEFAULT_CSV, EVAL_RESULTS_DIR, DATA_DIR
+from src.config import EVAL_DEFAULT_CSV, EVAL_RESULTS_DIR, DATA_DIR, REFUSAL_MESSAGE
 from src.rag_chain import answer_question
 
 
@@ -64,7 +64,7 @@ def run_evaluation(questions: List[Dict], retriever, save_path: str | None = Non
                 answerable_hits += 1
         else:
             unanswerable_total += 1
-            if result.get('answer','').strip() == ("I could not find this information in the uploaded documents."):
+            if result.get('answer','').strip() == REFUSAL_MESSAGE:
                 correctly_refused = True
                 unanswerable_correct += 1
 
@@ -97,4 +97,3 @@ def run_evaluation(questions: List[Dict], retriever, save_path: str | None = Non
                 writer.writerow(r)
 
     return {'results': results, 'summary': summary}
-*** End Patch
