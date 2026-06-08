@@ -18,7 +18,7 @@ from src.config import (
     TOP_K,
 )
 from src.rag_chain import answer_question
-from src.utils import format_source_preview
+from src.utils import format_retrieval_debug_chunk, format_source_preview
 
 
 load_dotenv()
@@ -137,6 +137,9 @@ def main():
     if "retrieval_method" not in st.session_state:
         st.session_state.retrieval_method = DEFAULT_RETRIEVAL_METHOD
 
+    if "show_retrieval_details" not in st.session_state:
+        st.session_state.show_retrieval_details = False
+
     if "saved_settings" not in st.session_state:
         st.session_state.saved_settings = {
             "chunk_size": st.session_state.chunk_size,
@@ -162,6 +165,12 @@ def main():
             "Upload one or more PDFs",
             type=["pdf"],
             accept_multiple_files=True,
+        )
+
+        st.checkbox(
+            "Show retrieval details",
+            value=st.session_state.show_retrieval_details,
+            key="show_retrieval_details",
         )
 
         st.subheader("RAG settings")
@@ -293,6 +302,21 @@ def main():
                 st.write(result["answer"])
 
             display_sources(result["sources"])
+
+            if st.session_state.show_retrieval_details:
+                st.subheader("Retrieval debug details")
+                st.write(
+                    f"**RAG settings used:** chunk_size={st.session_state.chunk_size}, "
+                    f"chunk_overlap={st.session_state.chunk_overlap}, top_k={st.session_state.top_k}, "
+                    f"retrieval_method={st.session_state.retrieval_method}"
+                )
+
+                for rank, doc in enumerate(result["sources"], start=1):
+                    with st.expander(
+                        f"Rank {rank}: {doc.metadata.get('source', 'Unknown source')} "
+                        f"(page {doc.metadata.get('page', 'Unknown page')})"
+                    ):
+                        st.write(format_retrieval_debug_chunk(doc, rank))
 
         except Exception as e:
             st.error(f"Error while answering question: {e}")
