@@ -1,0 +1,7 @@
+[run]
+source = app
+
+[report]
+fail_under = 75
+show_missing = True
+skip_covered = False
